@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Wipro Health Dashboard</title>
+<!-- PapaParse for CSV, SheetJS for Excel -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --primary:#1A3A5C;--primary-light:#2980B9;--accent:#27AE60;
+  --warn:#E67E22;--danger:#E74C3C;--info:#3498DB;
+  --bg:#F0F4F8;--card:#fff;--border:#DDE3EA;--text:#2C3E50;--muted:#7F8C8D;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px}
+.sidebar{position:fixed;top:0;left:0;width:230px;height:100vh;background:var(--primary);
+  display:flex;flex-direction:column;z-index:100;overflow-y:auto}
+.sidebar-logo{padding:18px 20px;border-bottom:1px solid rgba(255,255,255,.15)}
+.sidebar-logo .title{font-size:16px;font-weight:700;color:#fff}
+.sidebar-logo .sub{font-size:11px;color:rgba(255,255,255,.5);margin-top:2px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:11px 20px;cursor:pointer;
+  color:rgba(255,255,255,.75);font-size:13px;transition:.2s;border-left:3px solid transparent}
+.nav-item:hover,.nav-item.active{background:rgba(255,255,255,.08);color:#fff;border-left-color:#27AE60}
+.nav-item svg{width:15px;height:15px;flex-shrink:0}
+.nav-section{padding:8px 0;border-bottom:1px solid rgba(255,255,255,.1)}
+.nav-label{padding:5px 20px;font-size:10px;text-transform:uppercase;letter-spacing:1px;
+  color:rgba(255,255,255,.35);font-weight:600}
+.sidebar-bottom{padding:14px;margin-top:auto;border-top:1px solid rgba(255,255,255,.1)}
+.main{margin-left:230px;min-height:100vh;display:flex;flex-direction:column}
+.topbar{background:#fff;border-bottom:1px solid var(--border);padding:0 22px;height:54px;
+  display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
+.topbar-title{font-size:15px;font-weight:600;color:var(--primary)}
+.content{padding:22px;flex:1}
+.view{display:none}.view.active{display:block}
+
+/* CARDS */
+.card{background:#fff;border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-bottom:16px}
+.card-header{padding:13px 16px;border-bottom:1px solid var(--border);font-weight:600;
+  font-size:13px;color:var(--primary);display:flex;align-items:center;justify-content:space-between}
+.card-body{padding:16px}
+
+/* STATS */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(165px,1fr));gap:12px;margin-bottom:16px}
+.stat-card{background:#fff;border-radius:10px;border:1px solid var(--border);padding:14px 16px;position:relative;overflow:hidden}
+.stat-card::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%}
+.stat-card.blue::before{background:var(--primary)}
+.stat-card.green::before{background:var(--accent)}
+.stat-card.orange::before{background:var(--warn)}
+.stat-card.teal::before{background:var(--info)}
+.stat-label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.stat-val{font-size:26px;font-weight:700;color:var(--primary);margin:4px 0 2px}
+.stat-sub{font-size:11px;color:var(--muted)}
+
+/* ACTIVITY CARDS */
+.act-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}
+.act-card{border-radius:8px;padding:12px;text-align:center;border-left:4px solid}
+.act-card.ac{background:#EAFAF1;border-color:#27AE60;color:#1E8449}
+.act-card.pc{background:#FEF9E7;border-color:#F39C12;color:#D35400}
+.act-card.ic{background:#FDEDEC;border-color:#E74C3C;color:#C0392B}
+.act-card.nc{background:#F2F3F4;border-color:#95A5A6;color:#616A6B}
+.act-card.cc{background:#EBF5FB;border-color:#2980B9;color:#1A5276}
+.act-num{font-size:22px;font-weight:700}
+.act-lbl{font-size:10px;font-weight:600;text-transform:uppercase;margin-top:2px;opacity:.8}
+
+/* TABLE */
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{background:var(--primary);color:#fff;padding:9px 11px;text-align:left;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.3px;white-space:nowrap;cursor:pointer;user-select:none}
+thead th:hover{background:#0F2A45}
+tbody tr{border-bottom:1px solid var(--border);transition:.15s;cursor:pointer}
+tbody tr:hover{background:#EBF5FB}
+tbody tr:nth-child(even){background:#F8FBFD}
+tbody tr:nth-child(even):hover{background:#EBF5FB}
+td{padding:8px 11px;vertical-align:middle}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:10.5px;font-weight:600;white-space:nowrap}
+.b-active{background:#EAFAF1;color:#1E8449}
+.b-inactive{background:#FDEDEC;color:#C0392B}
+.b-partial{background:#FEF9E7;color:#D35400}
+.b-never{background:#F2F3F4;color:#616A6B}
+.b-completed{background:#EBF5FB;color:#1A5276}
+.b-better{background:#EAFAF1;color:#1E8449}
+.b-worse{background:#FDEDEC;color:#C0392B}
+.b-same{background:#EBF5FB;color:#1A5276}
+.b-nodata{background:#F2F3F4;color:#616A6B}
+.b-done{background:#F8F0FF;color:#6C3483}
+.b-failed{background:#FDEDEC;color:#C0392B}
+.b-noanswer{background:#FEF9E7;color:#D35400}
+.b-busy{background:#F2F3F4;color:#717D7E}
+
+/* FILTERS */
+.filters{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
+.fi{padding:7px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;
+  background:#fff;color:var(--text);outline:none}
+.fi:focus{border-color:var(--primary-light)}
+input.fi{min-width:200px}
+
+/* BUTTONS */
+.btn{padding:8px 15px;border-radius:7px;font-size:13px;font-weight:600;cursor:pointer;
+  border:none;display:inline-flex;align-items:center;gap:6px;transition:.15s;text-decoration:none}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:#0F2640}
+.btn-success{background:var(--accent);color:#fff}
+.btn-success:hover{background:#1E8449}
+.btn-outline{background:transparent;color:var(--primary);border:1.5px solid var(--primary)}
+.btn-outline:hover{background:var(--primary);color:#fff}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn-block{width:100%;justify-content:center}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;
+  display:flex;align-items:center;justify-content:center;padding:16px;
+  opacity:0;pointer-events:none;transition:.2s}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{background:#fff;border-radius:12px;width:920px;max-width:100%;max-height:90vh;
+  overflow:hidden;display:flex;flex-direction:column;transform:translateY(16px);transition:.2s}
+.overlay.open .modal{transform:translateY(0)}
+.modal-hd{padding:14px 18px;background:var(--primary);color:#fff;
+  display:flex;align-items:center;justify-content:space-between}
+.modal-hd h2{font-size:15px}
+.modal-bd{overflow-y:auto;padding:18px}
+.modal-close{background:none;border:none;color:#fff;cursor:pointer;font-size:22px;line-height:1;padding:0 4px}
+
+/* DETAIL */
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;margin-bottom:16px}
+.di{background:#F8FBFD;border-radius:8px;padding:11px;border:1px solid var(--border)}
+.di-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:600;margin-bottom:3px}
+.di-val{font-size:13px;font-weight:600;color:var(--text);word-break:break-all}
+.call-stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:14px}
+.cs{background:linear-gradient(135deg,#EBF5FB,#D6EAF8);border-radius:8px;padding:10px;text-align:center;border:1px solid #AED6F1}
+.cs-num{font-size:18px;font-weight:700;color:var(--primary)}
+.cs-lbl{font-size:9px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-top:2px}
+.sec-title{font-size:12px;font-weight:700;color:var(--primary);margin:14px 0 8px;
+  padding-bottom:5px;border-bottom:2px solid var(--border)}
+.call-row{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #F0F4F8}
+.call-row:last-child{border-bottom:none}
+.call-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.call-info .coach{font-size:12px;font-weight:600}
+.call-info .meta{font-size:11px;color:var(--muted);margin-top:2px}
+.params-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.params-tbl th{background:#F0F4F8;padding:7px 11px;text-align:left;font-size:10.5px;
+  text-transform:uppercase;color:var(--muted);font-weight:700}
+.params-tbl td{padding:7px 11px;border-bottom:1px solid var(--border)}
+.params-tbl tr:last-child td{border-bottom:none}
+.good{color:#27AE60;font-weight:700}.bad{color:#E74C3C;font-weight:700}.neutral{color:#3498DB;font-weight:600}
+
+/* OUTCOME BAR */
+.out-bar{height:16px;border-radius:8px;overflow:hidden;display:flex;margin:8px 0}
+.out-seg{height:100%}
+.out-legend{display:flex;gap:14px;font-size:11px;color:var(--muted);flex-wrap:wrap;margin-top:4px}
+.ldot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle}
+
+/* PROG BARS */
+.prog-bar-wrap{margin-bottom:8px}
+.prog-bar-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px}
+.prog-bar{height:7px;background:#EBF5FB;border-radius:4px;overflow:hidden}
+.prog-bar-fill{height:100%;background:var(--primary-light);border-radius:4px;transition:.4s}
+
+/* UPLOAD */
+.upload-zone{border:2px dashed var(--border);border-radius:10px;padding:24px;
+  text-align:center;background:#F8FBFD;transition:.2s}
+.upload-zone:hover{border-color:var(--primary-light);background:#EBF5FB}
+.upload-item{margin-bottom:12px}
+.upload-label{font-size:12px;font-weight:600;color:var(--muted);margin-bottom:5px;display:block}
+
+/* PAGINATION */
+.pagination{display:flex;gap:5px;justify-content:flex-end;margin-top:10px;align-items:center;flex-wrap:wrap}
+.pg-btn{padding:4px 10px;border-radius:5px;border:1px solid var(--border);background:#fff;cursor:pointer;font-size:12px}
+.pg-btn:hover,.pg-btn.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.pg-info{font-size:11px;color:var(--muted);margin:0 6px}
+
+/* HEALTH TABLE */
+.htbl{font-size:12px}
+.htbl td,.htbl th{padding:7px 11px}
+
+/* SPINNER */
+.spinner{display:inline-block;width:22px;height:22px;border:3px solid rgba(26,58,92,.15);
+  border-top-color:var(--primary);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.empty{padding:36px;text-align:center;color:var(--muted);font-style:italic}
+
+/* UPLOAD SCREEN (full overlay until data loaded) */
+#upload-screen{position:fixed;inset:0;background:var(--bg);z-index:300;
+  display:flex;align-items:center;justify-content:center;flex-direction:column}
+#upload-screen .box{background:#fff;border-radius:14px;padding:36px 40px;width:500px;
+  max-width:95vw;border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.08)}
+</style>
+</head>
+<body>
+
+<!-- ── UPLOAD SCREEN ─────────────────────────────────────────────────────── -->
+<div id="upload-screen">
+  <div class="box">
+    <div style="font-size:22px;font-weight:700;color:var(--primary);margin-bottom:4px">Wipro Health Dashboard</div>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:24px">Upload your 3 CSV files to begin. Data stays in your browser only.</div>
+
+    <div class="upload-item">
+      <label class="upload-label">① Users CSV <span style="font-weight:400">(User_name__Policy_na...)</span></label>
+      <input type="file" accept=".csv" id="f-users" class="fi" style="width:100%"/>
+    </div>
+    <div class="upload-item">
+      <label class="upload-label">② Consultations CSV <span style="font-weight:400">(Consultation_id__Coa...)</span></label>
+      <input type="file" accept=".csv" id="f-consult" class="fi" style="width:100%"/>
+    </div>
+    <div class="upload-item">
+      <label class="upload-label">③ HCP Requests CSV <span style="font-weight:400">(Hcp_requests_id__Con...)</span></label>
+      <input type="file" accept=".csv" id="f-hcp" class="fi" style="width:100%"/>
+    </div>
+    <button class="btn btn-primary btn-block" onclick="loadFiles()" style="margin-top:8px">
+      Load Dashboard
+    </button>
+    <div id="upload-msg" style="margin-top:12px;font-size:12px;color:var(--danger)"></div>
+  </div>
+</div>
+
+<!-- ── SIDEBAR ───────────────────────────────────────────────────────────── -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="title">Wipro Health</div>
+    <div class="sub">Program Dashboard</div>
+  </div>
+  <div class="nav-section">
+    <div class="nav-label">Navigation</div>
+    <div class="nav-item active" id="nav-dashboard" onclick="showView('dashboard',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </div>
+    <div class="nav-item" id="nav-users" onclick="showView('users',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      Users
+    </div>
+    <div class="nav-item" id="nav-health" onclick="showView('health',this)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+      Health Outcomes
+    </div>
+  </div>
+  <div class="sidebar-bottom">
+    <button class="btn btn-success btn-block" onclick="downloadExcel()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download Excel
+    </button>
+    <button class="btn btn-outline btn-block" onclick="resetData()" style="margin-top:8px;font-size:12px">
+      ↑ Load New CSVs
+    </button>
+  </div>
+</nav>
+
+<!-- ── MAIN ──────────────────────────────────────────────────────────────── -->
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="page-title">Dashboard Overview</div>
+    <div style="font-size:12px;color:var(--muted)" id="data-info"></div>
+  </div>
+  <div class="content">
+
+    <!-- DASHBOARD -->
+    <div class="view active" id="view-dashboard">
+      <div class="stats-grid">
+        <div class="stat-card blue"><div class="stat-label">Total Patients</div><div class="stat-val" id="s-total">—</div></div>
+        <div class="stat-card green"><div class="stat-label">Successful Calls</div><div class="stat-val" id="s-succ">—</div></div>
+        <div class="stat-card teal"><div class="stat-label">Total Calls</div><div class="stat-val" id="s-calls">—</div></div>
+        <div class="stat-card orange"><div class="stat-label">Diet Plans Sent</div><div class="stat-val" id="s-diet">—</div></div>
+      </div>
+      <div class="card">
+        <div class="card-header">Engagement / Activity Status</div>
+        <div class="card-body">
+          <div class="act-grid">
+            <div class="act-card ac"><div class="act-num" id="a-active">—</div><div class="act-lbl">Active</div></div>
+            <div class="act-card pc"><div class="act-num" id="a-partial">—</div><div class="act-lbl">Partially Active</div></div>
+            <div class="act-card ic"><div class="act-num" id="a-inactive">—</div><div class="act-lbl">Inactive</div></div>
+            <div class="act-card nc"><div class="act-num" id="a-never">—</div><div class="act-lbl">Never Engaged</div></div>
+            <div class="act-card cc"><div class="act-num" id="a-done">—</div><div class="act-lbl">Completed</div></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="card">
+          <div class="card-header">Health Outcomes</div>
+          <div class="card-body">
+            <div class="out-bar" id="out-bar"></div>
+            <div class="out-legend" id="out-legend"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">Program Breakdown</div>
+          <div class="card-body" id="prog-breakdown"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- USERS -->
+    <div class="view" id="view-users">
+      <div class="filters">
+        <input class="fi" id="search-in" placeholder="🔍 Search patient…" oninput="filterUsers()"/>
+        <select class="fi" id="prog-fil" onchange="filterUsers()">
+          <option value="">All Programs</option>
+          <option>Diabetes</option><option>Gut Management</option>
+          <option>Fatty Liver</option><option>Cholestrol</option><option>Hypertension</option>
+        </select>
+        <select class="fi" id="act-fil" onchange="filterUsers()">
+          <option value="">All Activity</option>
+          <option>Active</option><option>Partially Active</option>
+          <option>Inactive</option><option>Never Engaged</option><option>Program Completed</option>
+        </select>
+        <span style="margin-left:auto;font-size:12px;color:var(--muted)" id="row-count"></span>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table id="users-tbl">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th onclick="sortBy('patient_name')">Patient ▾</th>
+                <th onclick="sortBy('program_name')">Program</th>
+                <th onclick="sortBy('enrolled_date')">Enrolled</th>
+                <th onclick="sortBy('current_month')">Month</th>
+                <th onclick="sortBy('nutri_calls')">Nutri</th>
+                <th onclick="sortBy('psycho_calls')">Psych</th>
+                <th onclick="sortBy('physio_calls')">Physio</th>
+                <th onclick="sortBy('total_calls')">Total</th>
+                <th onclick="sortBy('successful_calls')">Success</th>
+                <th onclick="sortBy('diet_plans_sent')">Diet Plans</th>
+                <th onclick="sortBy('last_call_date')">Last Call</th>
+                <th>Last Status</th>
+                <th onclick="sortBy('activity_status')">Activity</th>
+                <th onclick="sortBy('overall_status')">Outcome</th>
+                <th onclick="sortBy('program_status')">Program Status</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+        <div style="padding:8px 14px;border-top:1px solid var(--border)">
+          <div class="pagination" id="pagination"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HEALTH -->
+    <div class="view" id="view-health">
+      <div class="filters">
+        <input class="fi" id="health-search" placeholder="🔍 Filter by patient…" oninput="filterHealth()"/>
+        <select class="fi" id="health-prog" onchange="filterHealth()">
+          <option value="">All Programs</option>
+          <option>Diabetes</option><option>Gut Management</option>
+          <option>Fatty Liver</option><option>Cholestrol</option><option>Hypertension</option>
+        </select>
+      </div>
+      <div class="card">
+        <div class="table-wrap">
+          <table class="htbl">
+            <thead>
+              <tr>
+                <th>Patient</th><th>Program</th><th>Metric</th>
+                <th>First Value</th><th>First Date</th>
+                <th>Last Value</th><th>Last Date</th>
+                <th>Change</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="health-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- ── MODAL ─────────────────────────────────────────────────────────────── -->
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="modal-hd">
+      <h2 id="modal-name">Patient Detail</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-bd" id="modal-bd"></div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// DATA STORE
+// ════════════════════════════════════════════════════════════════
+let RAW = { users: [], consult: [], hcp: [] };
+let PROCESSED = [];   // one object per unique patient
+let filteredUsers = [];
+let filteredHealth = [];
+let currentPage = 1;
+const PAGE = 25;
+let sortKey = 'current_month';
+let sortDir = -1;
+
+// ════════════════════════════════════════════════════════════════
+// CONSTANTS
+// ════════════════════════════════════════════════════════════════
+const LOWER_IS_BETTER = new Set([
+  'weight','fasting blood sugar','hba1c level','postprandial',
+  'ldl level','total cholesterol','triglycerides level',
+  'diastolic value','systolic value',
+  'alanine aminotransferase (alt)','aspartate aminotransferase (ast)'
+]);
+
+// ════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════
+const sv = v => (v==null||v===undefined||String(v).trim()===''||String(v).trim()==='nan'||String(v).trim()==='NaN') ? 'NA' : String(v).trim();
+const safeNum = v => { const n=parseFloat(v); return isNaN(n)?0:n; };
+
+function parseCSV(file){
+  return new Promise((res,rej)=>{
+    Papa.parse(file,{
+      header:true, skipEmptyLines:true,
+      complete: r => res(r.data),
+      error: e => rej(e)
+    });
+  });
+}
+
+function parseDt(s){
+  if(!s||s==='NA') return null;
+  const d = new Date(s.replace(' ','T'));
+  return isNaN(d)?null:d;
+}
+
+function fmtDate(d){
+  if(!d) return 'NA';
+  return d.toISOString().slice(0,10);
+}
+
+function monthsElapsed(enrollDate, callDate){
+  if(!enrollDate||!callDate) return null;
+  const diffDays = (callDate - enrollDate) / (1000*60*60*24);
+  return Math.max(1, Math.ceil(diffDays / 30.44));
+}
+
+// ════════════════════════════════════════════════════════════════
+// LOAD FILES
+// ════════════════════════════════════════════════════════════════
+async function loadFiles(){
+  const fu = document.getElementById('f-users').files[0];
+  const fc = document.getElementById('f-consult').files[0];
+  const fh = document.getElementById('f-hcp').files[0];
+  const msg = document.getElementById('upload-msg');
+  if(!fu||!fc||!fh){ msg.textContent='Please select all 3 CSV files.'; return; }
+  msg.textContent='Loading…';
+  try{
+    const [users, consult, hcp] = await Promise.all([parseCSV(fu),parseCSV(fc),parseCSV(fh)]);
+    RAW.users   = users;
+    RAW.consult = consult;
+    RAW.hcp     = hcp;
+    processData();
+    document.getElementById('upload-screen').style.display='none';
+    document.getElementById('data-info').textContent = `${PROCESSED.length} patients loaded`;
+    renderDashboard();
+    renderUsersTable();
+    renderHealthTable();
+  } catch(e){ msg.textContent='Error: '+e.message; }
+}
+
+function resetData(){
+  document.getElementById('upload-screen').style.display='flex';
+  document.getElementById('f-users').value='';
+  document.getElementById('f-consult').value='';
+  document.getElementById('f-hcp').value='';
+  document.getElementById('upload-msg').textContent='';
+}
+
+// ════════════════════════════════════════════════════════════════
+// PROCESS DATA
+// ════════════════════════════════════════════════════════════════
+function processData(){
+  const userMap = {};
+  // Build per-patient base from users CSV
+  for(const row of RAW.users){
+    const name = sv(row['Patent Name']);
+    if(name==='NA') continue;
+    if(!userMap[name]){
+      userMap[name]={
+        patient_name: name,
+        policy_name: sv(row['Policy Name']),
+        employee_id: sv(row['Employee ID']),
+        email: sv(row['Email']),
+        age: sv(row['Age']),
+        gender: sv(row['Gender']),
+        program_name: sv(row['Program Name']),
+        enrolled_on: sv(row['Enrolled On']),
+        enrolled_dt: parseDt(row['Enrolled On']),
+        current_month: safeNum(row['Current Month of Program'])||0,
+        nutri_calls:0, psycho_calls:0, physio_calls:0, diet_plans_sent:0,
+      };
+    }
+    const vert = sv(row['Vertical Name']);
+    const calls = safeNum(row['Total Calls Made']);
+    const diet  = safeNum(row['Total Diet Plan Sent']);
+    if(vert==='Nutritionist'){ userMap[name].nutri_calls+=calls; userMap[name].diet_plans_sent+=diet; }
+    else if(vert==='Psychologist') userMap[name].psycho_calls+=calls;
+    else if(vert==='Physiotherapist') userMap[name].physio_calls+=calls;
+  }
+
+  // Group consultations by patient
+  const consultMap = {};
+  for(const row of RAW.consult){
+    const name = sv(row['Patient Name']);
+    if(!consultMap[name]) consultMap[name]=[];
+    consultMap[name].push({
+      date: parseDt(row['Coach Called at']),
+      coach: sv(row['Coach Name']),
+      vertical: sv(row['Coach Vertical']),
+      status: sv(row['Status']).toLowerCase(),
+      duration: sv(row['Duration']),
+      purpose: sv(row['Purpose']),
+    });
+  }
+
+  // Group HCP by patient
+  const hcpMap = {};
+  for(const row of RAW.hcp){
+    const name = sv(row['Patient Name']);
+    if(!hcpMap[name]) hcpMap[name]=[];
+    hcpMap[name].push({
+      metric: sv(row['Metric']),
+      value: parseFloat(row['Values']),
+      date: parseDt(row['Created At']),
+    });
+  }
+
+  // Compute derived fields per patient
+  PROCESSED = Object.values(userMap).map(p=>{
+    const calls = consultMap[p.patient_name]||[];
+    const hcp   = hcpMap[p.patient_name]||[];
+
+    // Sort calls
+    calls.sort((a,b)=>(a.date||0)-(b.date||0));
+
+    // Last call
+    const lastCall = [...calls].reverse().find(c=>c.date);
+    p.last_call_date   = lastCall ? fmtDate(lastCall.date) : 'NA';
+    p.last_call_status = lastCall ? lastCall.status : 'NA';
+
+    // Successful calls
+    p.successful_calls = calls.filter(c=>c.status==='completed').length;
+    p.total_calls = p.nutri_calls + p.psycho_calls + p.physio_calls;
+
+    // Activity status
+    p.activity_status = computeActivity(p, calls);
+
+    // Health outcome
+    p.overall_status = computeOutcome(hcp);
+
+    // Program status
+    p.program_status = computeProgramStatus(p);
+
+    // Health parameters
+    p.parameters = computeParams(hcp);
+
+    // Call history (sorted newest first)
+    p.call_history = [...calls].reverse();
+
+    return p;
+  });
+
+  filteredUsers  = [...PROCESSED];
+  filteredHealth = [...PROCESSED];
+}
+
+// ════════════════════════════════════════════════════════════════
+// ACTIVITY STATUS LOGIC
+// ════════════════════════════════════════════════════════════════
+function computeActivity(p, calls){
+  const enrollDt = p.enrolled_dt;
+  if(!enrollDt) return 'Unknown';
+
+  const completed = calls.filter(c=>c.status==='completed' && c.date);
+  if(completed.length===0) return 'Never Engaged';
+
+  const cur = p.current_month || 1;
+  if(cur >= 12) return 'Program Completed';
+
+  // Which program months had completed calls?
+  const activeMonths = new Set();
+  for(const c of completed){
+    const m = monthsElapsed(enrollDt, c.date);
+    if(m) activeMonths.add(m);
+  }
+
+  if(activeMonths.size===0) return 'Never Engaged';
+
+  const maxActive = Math.max(...activeMonths);
+
+  // All calls were only in month 1, nothing after
+  if(maxActive===1 && cur>1) return 'Inactive';
+
+  // Recent 2 months with no calls → Inactive
+  if(cur>2){
+    const recent = [cur, cur-1];
+    if(recent.every(m=>!activeMonths.has(m))) return 'Inactive';
+  }
+
+  // Gap of 3+ months → Partially Active
+  const sorted = [...activeMonths].sort((a,b)=>a-b);
+  for(let i=1;i<sorted.length;i++){
+    if(sorted[i]-sorted[i-1]>=3) return 'Partially Active';
+  }
+
+  // Few missing months but still engaging
+  const expected = Array.from({length:cur},(_,i)=>i+1);
+  const missing  = expected.filter(m=>!activeMonths.has(m));
+  if(missing.length>2 && missing.length > expected.length*0.4) return 'Partially Active';
+
+  return 'Active';
+}
+
+// ════════════════════════════════════════════════════════════════
+// HEALTH OUTCOME
+// ════════════════════════════════════════════════════════════════
+function computeOutcome(hcpRows){
+  if(!hcpRows||hcpRows.length===0) return 'No Data';
+  // Group by metric
+  const byMetric = {};
+  for(const r of hcpRows){
+    if(!byMetric[r.metric]) byMetric[r.metric]=[];
+    if(!isNaN(r.value)&&r.date) byMetric[r.metric].push(r);
+  }
+  let imp=0, worse=0;
+  for(const [metric, rows] of Object.entries(byMetric)){
+    const sorted = rows.sort((a,b)=>a.date-b.date);
+    if(sorted.length<2) continue;
+    const first=sorted[0].value, last=sorted[sorted.length-1].value;
+    if(first===0||last===0) continue;
+    const pct=(last-first)/Math.abs(first);
+    const lowerGood = LOWER_IS_BETTER.has(metric.toLowerCase());
+    if(lowerGood){ if(pct<-0.02)imp++;else if(pct>0.02)worse++; }
+    else          { if(pct>0.02)imp++;else if(pct<-0.02)worse++; }
+  }
+  if(imp>worse&&imp>0) return 'Better than before';
+  if(worse>imp&&worse>0) return 'Worse than before';
+  return 'Same as before';
+}
+
+// ════════════════════════════════════════════════════════════════
+// PARAMETERS (first vs last per metric)
+// ════════════════════════════════════════════════════════════════
+function computeParams(hcpRows){
+  if(!hcpRows||hcpRows.length===0) return {};
+  const byMetric = {};
+  for(const r of hcpRows){
+    if(!byMetric[r.metric]) byMetric[r.metric]=[];
+    if(!isNaN(r.value)&&r.date) byMetric[r.metric].push(r);
+  }
+  const result = {};
+  for(const [metric, rows] of Object.entries(byMetric)){
+    const sorted = rows.sort((a,b)=>a.date-b.date);
+    const first = sorted[0], last = sorted[sorted.length-1];
+    const hasMultiple = sorted.length>1;
+    let change='NA', direction='neutral';
+    if(hasMultiple && first.value!==0){
+      const pct=((last.value-first.value)/Math.abs(first.value))*100;
+      change = (pct>=0?'+':'')+pct.toFixed(1)+'%';
+      const lowerGood = LOWER_IS_BETTER.has(metric.toLowerCase());
+      if(lowerGood) direction=pct<-2?'good':pct>2?'bad':'neutral';
+      else           direction=pct>2?'good':pct<-2?'bad':'neutral';
+    }
+    result[metric]={
+      first: Math.round(first.value*100)/100,
+      first_date: fmtDate(first.date),
+      last: hasMultiple ? Math.round(last.value*100)/100 : 'NA',
+      last_date: hasMultiple ? fmtDate(last.date) : 'NA',
+      change, direction,
+      all_values: sorted.map(r=>({value:r.value,date:fmtDate(r.date)}))
+    };
+  }
+  return result;
+}
+
+// ════════════════════════════════════════════════════════════════
+// PROGRAM STATUS
+// ════════════════════════════════════════════════════════════════
+function computeProgramStatus(p){
+  const act=p.activity_status, out=p.overall_status;
+  if(act==='Never Engaged') return 'Enrolled - No Activity';
+  if(act==='Program Completed') return `Program Completed - ${out}`;
+  if(act==='Inactive') return 'Inactive';
+  if(act==='Partially Active') return 'Partially Active';
+  if(out==='Better than before') return 'Active - On Track';
+  if(out==='Worse than before') return 'Active - Needs Attention';
+  return 'Active';
+}
+
+// ════════════════════════════════════════════════════════════════
+// BADGES
+// ════════════════════════════════════════════════════════════════
+function actBadge(s){
+  const m={Active:'b-active','Partially Active':'b-partial',Inactive:'b-inactive',
+    'Never Engaged':'b-never','Program Completed':'b-completed',Unknown:'b-never'};
+  return `<span class="badge ${m[s]||'b-never'}">${s}</span>`;
+}
+function outBadge(s){
+  const m={'Better than before':'b-better','Worse than before':'b-worse',
+    'Same as before':'b-same','No Data':'b-nodata'};
+  return `<span class="badge ${m[s]||'b-nodata'}">${s}</span>`;
+}
+function progBadge(s){
+  let c='b-same';
+  if(s.includes('On Track'))c='b-better';
+  else if(s.includes('Inactive'))c='b-inactive';
+  else if(s.includes('Attention'))c='b-noanswer';
+  else if(s.includes('Completed'))c='b-completed';
+  else if(s.includes('No Activity'))c='b-never';
+  else if(s.includes('Partial'))c='b-partial';
+  return `<span class="badge ${c}">${s}</span>`;
+}
+function callBadge(s){
+  const m={completed:'b-active',failed:'b-failed','no-answer':'b-noanswer',busy:'b-busy',na:'b-nodata'};
+  return `<span class="badge ${m[s]||'b-nodata'}">${s}</span>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// DASHBOARD
+// ════════════════════════════════════════════════════════════════
+function renderDashboard(){
+  const P=PROCESSED;
+  document.getElementById('s-total').textContent=P.length;
+  document.getElementById('s-succ').textContent=P.reduce((a,p)=>a+p.successful_calls,0);
+  document.getElementById('s-calls').textContent=P.reduce((a,p)=>a+p.total_calls,0);
+  document.getElementById('s-diet').textContent=P.reduce((a,p)=>a+p.diet_plans_sent,0);
+
+  // Activity
+  const ac=P.filter(p=>p.activity_status==='Active').length;
+  const pc=P.filter(p=>p.activity_status==='Partially Active').length;
+  const ic=P.filter(p=>p.activity_status==='Inactive').length;
+  const nc=P.filter(p=>p.activity_status==='Never Engaged').length;
+  const cc=P.filter(p=>p.activity_status==='Program Completed').length;
+  document.getElementById('a-active').textContent=ac;
+  document.getElementById('a-partial').textContent=pc;
+  document.getElementById('a-inactive').textContent=ic;
+  document.getElementById('a-never').textContent=nc;
+  document.getElementById('a-done').textContent=cc;
+
+  // Outcome bar
+  const better=P.filter(p=>p.overall_status==='Better than before').length;
+  const same=P.filter(p=>p.overall_status==='Same as before').length;
+  const worse=P.filter(p=>p.overall_status==='Worse than before').length;
+  const nodata=P.filter(p=>p.overall_status==='No Data').length;
+  const tot=P.length||1;
+  document.getElementById('out-bar').innerHTML=`
+    <div class="out-seg" style="width:${better/tot*100}%;background:#27AE60"></div>
+    <div class="out-seg" style="width:${same/tot*100}%;background:#3498DB"></div>
+    <div class="out-seg" style="width:${worse/tot*100}%;background:#E74C3C"></div>
+    <div class="out-seg" style="width:${nodata/tot*100}%;background:#BDC3C7"></div>`;
+  document.getElementById('out-legend').innerHTML=`
+    <span><span class="ldot" style="background:#27AE60"></span>Better (${better})</span>
+    <span><span class="ldot" style="background:#3498DB"></span>Same (${same})</span>
+    <span><span class="ldot" style="background:#E74C3C"></span>Worse (${worse})</span>
+    <span><span class="ldot" style="background:#BDC3C7"></span>No Data (${nodata})</span>`;
+
+  // Program breakdown
+  const progCounts={};
+  P.forEach(p=>{ progCounts[p.program_name]=(progCounts[p.program_name]||0)+1; });
+  const maxC=Math.max(...Object.values(progCounts));
+  document.getElementById('prog-breakdown').innerHTML=Object.entries(progCounts)
+    .sort((a,b)=>b[1]-a[1])
+    .map(([prog,cnt])=>`
+      <div class="prog-bar-wrap">
+        <div class="prog-bar-label"><span style="font-weight:600">${prog}</span><span style="color:var(--muted)">${cnt} patients</span></div>
+        <div class="prog-bar"><div class="prog-bar-fill" style="width:${cnt/maxC*100}%"></div></div>
+      </div>`).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+// USERS TABLE
+// ════════════════════════════════════════════════════════════════
+function filterUsers(){
+  const s=document.getElementById('search-in').value.toLowerCase();
+  const p=document.getElementById('prog-fil').value;
+  const a=document.getElementById('act-fil').value;
+  filteredUsers=PROCESSED.filter(u=>{
+    if(s&&!u.patient_name.toLowerCase().includes(s)) return false;
+    if(p&&u.program_name!==p) return false;
+    if(a&&u.activity_status!==a) return false;
+    return true;
+  });
+  currentPage=1;
+  renderUsersTable();
+}
+
+function sortBy(key){
+  if(sortKey===key) sortDir*=-1; else{ sortKey=key; sortDir=-1; }
+  renderUsersTable();
+}
+
+function renderUsersTable(){
+  const sorted=[...filteredUsers].sort((a,b)=>{
+    const av=a[sortKey],bv=b[sortKey];
+    if(typeof av==='number') return (av-bv)*sortDir;
+    return String(av||'').localeCompare(String(bv||''))*sortDir;
+  });
+
+  const start=(currentPage-1)*PAGE;
+  const page=sorted.slice(start,start+PAGE);
+  document.getElementById('row-count').textContent=`${filteredUsers.length} patients`;
+
+  document.getElementById('users-tbody').innerHTML=page.map((u,i)=>`
+    <tr onclick="openModal('${encodeURIComponent(u.patient_name)}')">
+      <td style="color:var(--muted);font-size:11px">${start+i+1}</td>
+      <td style="font-weight:600;color:var(--primary)">${u.patient_name}</td>
+      <td><span style="background:#EBF5FB;color:var(--primary);padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600">${u.program_name}</span></td>
+      <td style="font-size:11px;color:var(--muted)">${u.enrolled_on.split(' ')[0]||'NA'}</td>
+      <td style="text-align:center;font-weight:700">${u.current_month}</td>
+      <td style="text-align:center">${u.nutri_calls}</td>
+      <td style="text-align:center">${u.psycho_calls}</td>
+      <td style="text-align:center">${u.physio_calls}</td>
+      <td style="text-align:center;font-weight:700">${u.total_calls}</td>
+      <td style="text-align:center;color:#27AE60;font-weight:700">${u.successful_calls}</td>
+      <td style="text-align:center">${u.diet_plans_sent}</td>
+      <td style="font-size:11px;color:var(--muted)">${u.last_call_date}</td>
+      <td>${callBadge(u.last_call_status)}</td>
+      <td>${actBadge(u.activity_status)}</td>
+      <td>${outBadge(u.overall_status)}</td>
+      <td>${progBadge(u.program_status)}</td>
+    </tr>`).join('');
+
+  // Pagination
+  const total=Math.ceil(filteredUsers.length/PAGE);
+  let ph=`<span class="pg-info">Page ${currentPage} of ${total}</span>`;
+  if(currentPage>1) ph+=`<button class="pg-btn" onclick="goPage(${currentPage-1})">‹</button>`;
+  const s2=Math.max(1,currentPage-2),e2=Math.min(total,currentPage+2);
+  for(let p=s2;p<=e2;p++) ph+=`<button class="pg-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+  if(currentPage<total) ph+=`<button class="pg-btn" onclick="goPage(${currentPage+1})">›</button>`;
+  document.getElementById('pagination').innerHTML=ph;
+}
+
+function goPage(p){ currentPage=p; renderUsersTable(); }
+
+// ════════════════════════════════════════════════════════════════
+// HEALTH TABLE
+// ════════════════════════════════════════════════════════════════
+function filterHealth(){
+  const s=document.getElementById('health-search').value.toLowerCase();
+  const p=document.getElementById('health-prog').value;
+  filteredHealth=PROCESSED.filter(u=>{
+    if(s&&!u.patient_name.toLowerCase().includes(s)) return false;
+    if(p&&u.program_name!==p) return false;
+    return true;
+  });
+  renderHealthTable();
+}
+
+function renderHealthTable(){
+  let html='';
+  for(const p of filteredHealth){
+    const params=p.parameters;
+    const keys=Object.keys(params);
+    if(keys.length===0){
+      html+=`<tr>
+        <td style="font-weight:600">${p.patient_name}</td>
+        <td>${p.program_name}</td>
+        <td colspan="7" style="color:var(--muted);font-style:italic">No health data</td></tr>`;
+      continue;
+    }
+    keys.forEach((metric,i)=>{
+      const info=params[metric];
+      const cc=info.direction==='good'?'good':info.direction==='bad'?'bad':'neutral';
+      const icon=info.direction==='good'?'↑ Improved':info.direction==='bad'?'↓ Worsened':info.change!=='NA'?'→ Stable':'— Only 1 Reading';
+      html+=`<tr>
+        ${i===0?`<td rowspan="${keys.length}" style="font-weight:600;vertical-align:top;padding-top:10px">${p.patient_name}</td>
+                 <td rowspan="${keys.length}" style="vertical-align:top;padding-top:10px"><span style="background:#EBF5FB;color:var(--primary);padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600">${p.program_name}</span></td>`:''}
+        <td style="font-weight:500">${metric}</td>
+        <td style="text-align:center">${info.first}</td>
+        <td style="text-align:center;font-size:11px;color:var(--muted)">${info.first_date}</td>
+        <td style="text-align:center;font-weight:600">${info.last!=='NA'?info.last:'<span style="color:var(--muted);font-style:italic">No follow-up</span>'}</td>
+        <td style="text-align:center;font-size:11px;color:var(--muted)">${info.last_date}</td>
+        <td style="text-align:center" class="${cc}">${info.change}</td>
+        <td style="text-align:center" class="${cc}">${icon}</td>
+      </tr>`;
+    });
+  }
+  document.getElementById('health-tbody').innerHTML=html||'<tr><td colspan="9" class="empty">No health data found</td></tr>';
+}
+
+// ════════════════════════════════════════════════════════════════
+// MODAL
+// ════════════════════════════════════════════════════════════════
+function openModal(encodedName){
+  const name=decodeURIComponent(encodedName);
+  const p=PROCESSED.find(u=>u.patient_name===name);
+  if(!p) return;
+  document.getElementById('modal-name').textContent=name;
+  document.getElementById('overlay').classList.add('open');
+
+  // Parameters
+  const params=p.parameters;
+  const paramKeys=Object.keys(params);
+  const paramsHtml=paramKeys.length===0
+    ?'<p style="color:var(--muted);font-style:italic">No health parameters recorded</p>'
+    :`<table class="params-tbl"><thead><tr>
+        <th>Metric</th><th>First Value</th><th>First Date</th>
+        <th>Latest Value</th><th>Latest Date</th><th>Change</th><th>Status</th>
+      </tr></thead><tbody>${paramKeys.map(metric=>{
+        const info=params[metric];
+        const cc=info.direction==='good'?'good':info.direction==='bad'?'bad':'neutral';
+        const icon=info.direction==='good'?'↑ Improved':info.direction==='bad'?'↓ Worsened':info.change!=='NA'?'→ Stable':'— Only 1 Reading';
+        return `<tr>
+          <td style="font-weight:600">${metric}</td>
+          <td style="text-align:center">${info.first}</td>
+          <td style="text-align:center;font-size:11px;color:var(--muted)">${info.first_date}</td>
+          <td style="text-align:center;font-weight:700">${info.last!=='NA'?info.last:'<span style="color:var(--muted)">NA</span>'}</td>
+          <td style="text-align:center;font-size:11px;color:var(--muted)">${info.last_date}</td>
+          <td class="${cc}" style="text-align:center">${info.change}</td>
+          <td class="${cc}" style="text-align:center">${icon}</td>
+        </tr>`;
+      }).join('')}</tbody></table>`;
+
+  // Call history
+  const callsHtml=p.call_history.length===0
+    ?'<p style="color:var(--muted);font-style:italic">No calls recorded</p>'
+    :p.call_history.slice(0,50).map(c=>{
+      const dotCls=c.status==='completed'?'b-active':c.status==='failed'?'b-failed':c.status==='no-answer'?'b-noanswer':'b-busy';
+      const dotColor=c.status==='completed'?'#27AE60':c.status==='failed'?'#E74C3C':c.status==='no-answer'?'#F39C12':'#95A5A6';
+      return `<div class="call-row">
+        <div class="call-dot" style="background:${dotColor}"></div>
+        <div class="call-info">
+          <div class="coach">${c.coach} <span style="color:var(--muted);font-weight:400">(${c.vertical})</span>
+            ${callBadge(c.status)}
+          </div>
+          <div class="meta">${c.purpose} · ${c.duration&&c.duration!='0'?c.duration+'s duration':'no duration'}</div>
+          <div class="meta" style="margin-top:2px">${c.date?fmtDate(c.date):''}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+  document.getElementById('modal-bd').innerHTML=`
+    <div class="detail-grid">
+      <div class="di"><div class="di-label">Program</div><div class="di-val">${p.program_name}</div></div>
+      <div class="di"><div class="di-label">Enrolled</div><div class="di-val">${p.enrolled_on.split(' ')[0]}</div></div>
+      <div class="di"><div class="di-label">Current Month</div><div class="di-val">Month ${p.current_month}</div></div>
+      <div class="di"><div class="di-label">Age / Gender</div><div class="di-val">${p.age} / ${p.gender}</div></div>
+      <div class="di"><div class="di-label">Email</div><div class="di-val" style="font-size:11px">${p.email}</div></div>
+      <div class="di"><div class="di-label">Last Call</div><div class="di-val">${p.last_call_date} ${callBadge(p.last_call_status)}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+      <div class="di" style="text-align:center"><div class="di-label">Activity Status</div><div style="margin-top:6px">${actBadge(p.activity_status)}</div></div>
+      <div class="di" style="text-align:center"><div class="di-label">Health Outcome</div><div style="margin-top:6px">${outBadge(p.overall_status)}</div></div>
+      <div class="di" style="text-align:center"><div class="di-label">Program Status</div><div style="margin-top:6px">${progBadge(p.program_status)}</div></div>
+    </div>
+    <div class="call-stats">
+      <div class="cs"><div class="cs-num">${p.nutri_calls}</div><div class="cs-lbl">Nutritionist</div></div>
+      <div class="cs"><div class="cs-num">${p.psycho_calls}</div><div class="cs-lbl">Psychologist</div></div>
+      <div class="cs"><div class="cs-num">${p.physio_calls}</div><div class="cs-lbl">Physiotherapist</div></div>
+      <div class="cs"><div class="cs-num" style="color:var(--primary)">${p.total_calls}</div><div class="cs-lbl">Total Calls</div></div>
+      <div class="cs"><div class="cs-num" style="color:#27AE60">${p.successful_calls}</div><div class="cs-lbl">Successful</div></div>
+    </div>
+    <div style="background:#FEF9E7;border:1px solid #F39C12;border-radius:6px;padding:7px 12px;margin-bottom:14px;font-size:12px">
+      <span style="font-weight:700">Diet Plans Sent:</span> ${p.diet_plans_sent}
+    </div>
+    <div class="sec-title">Health Parameters</div>
+    ${paramsHtml}
+    <div class="sec-title">Call History (latest ${Math.min(50,p.call_history.length)})</div>
+    <div style="max-height:280px;overflow-y:auto">${callsHtml}</div>`;
+}
+function closeModal(){ document.getElementById('overlay').classList.remove('open'); }
+
+// ════════════════════════════════════════════════════════════════
+// EXCEL EXPORT (SheetJS)
+// ════════════════════════════════════════════════════════════════
+function downloadExcel(){
+  if(PROCESSED.length===0){ alert('No data loaded.'); return; }
+  const wb=XLSX.utils.book_new();
+
+  // ── Sheet 1: User Summary ────────────────────────────────────
+  const s1Data=[
+    ['Patient Name','Program','Enrolled Date','Current Month',
+     'Nutritionist Calls','Psychologist Calls','Physiotherapist Calls',
+     'Total Calls','Successful Calls','Diet Plans Sent',
+     'Last Call Date','Last Call Status',
+     'Activity Status','Health Outcome','Program Status']
+  ];
+  [...PROCESSED].sort((a,b)=>b.current_month-a.current_month).forEach(p=>{
+    s1Data.push([
+      p.patient_name, p.program_name, p.enrolled_on.split(' ')[0], p.current_month,
+      p.nutri_calls, p.psycho_calls, p.physio_calls,
+      p.total_calls, p.successful_calls, p.diet_plans_sent,
+      p.last_call_date, p.last_call_status,
+      p.activity_status, p.overall_status, p.program_status
+    ]);
+  });
+  const ws1=XLSX.utils.aoa_to_sheet(s1Data);
+  ws1['!cols']=[25,16,14,10,16,16,18,12,14,12,14,14,20,20,28].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws1,'User Summary');
+
+  // ── Sheet 2: Health Outcomes ─────────────────────────────────
+  const s2Data=[['Patient Name','Program','Metric','First Value','First Date','Last Value','Last Date','Change %','Status']];
+  PROCESSED.forEach(p=>{
+    const keys=Object.keys(p.parameters);
+    if(keys.length===0){
+      s2Data.push([p.patient_name,p.program_name,'No health data recorded','','','','','','']);
+    } else {
+      keys.forEach(metric=>{
+        const info=p.parameters[metric];
+        const statusText=info.direction==='good'?'↑ Improved':info.direction==='bad'?'↓ Worsened':info.change!=='NA'?'→ Stable':'— Only 1 Reading';
+        s2Data.push([
+          p.patient_name, p.program_name, metric,
+          info.first, info.first_date,
+          info.last!=='NA'?info.last:'No follow-up',
+          info.last_date,
+          info.change, statusText
+        ]);
+      });
+    }
+  });
+  const ws2=XLSX.utils.aoa_to_sheet(s2Data);
+  ws2['!cols']=[25,16,36,14,14,14,14,12,16].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws2,'Health Outcomes');
+
+  // ── Sheet 3: Activity Analysis ───────────────────────────────
+  const actMap={};
+  PROCESSED.forEach(p=>{ actMap[p.activity_status]=(actMap[p.activity_status]||0)+1; });
+  const s3Data=[['Activity Status','Count','Percentage','Description'],
+    ...Object.entries(actMap).map(([s,c])=>[
+      s, c, `${(c/PROCESSED.length*100).toFixed(1)}%`,
+      {Active:'Regular calls across months with no significant gap',
+       'Partially Active':'Calls early, then 3+ month gap, then resumed',
+       Inactive:'Had calls early but missing 2+ consecutive recent months',
+       'Never Engaged':'Enrolled but zero completed calls',
+       'Program Completed':'Completed full 12-month program'}[s]||''
+    ])
+  ];
+  const ws3=XLSX.utils.aoa_to_sheet(s3Data);
+  ws3['!cols']=[22,10,14,60].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws3,'Activity Analysis');
+
+  // ── Sheet 4: Program Summary ─────────────────────────────────
+  const progMap={};
+  PROCESSED.forEach(p=>{
+    if(!progMap[p.program_name]) progMap[p.program_name]={enrolled:0,active:0,inactive:0,partial:0,better:0,same:0,worse:0,totalCalls:0};
+    const m=progMap[p.program_name];
+    m.enrolled++;
+    if(['Active','Program Completed'].includes(p.activity_status)) m.active++;
+    else if(['Inactive','Never Engaged'].includes(p.activity_status)) m.inactive++;
+    else if(p.activity_status==='Partially Active') m.partial++;
+    if(p.overall_status==='Better than before') m.better++;
+    else if(p.overall_status==='Same as before') m.same++;
+    else if(p.overall_status==='Worse than before') m.worse++;
+    m.totalCalls+=p.total_calls;
+  });
+  const s4Data=[['Program','Enrolled','Active','Inactive','Partially Active','Better Outcome','Same/No Data','Worse Outcome','Avg Calls'],
+    ...Object.entries(progMap).map(([prog,m])=>[
+      prog,m.enrolled,m.active,m.inactive,m.partial,
+      m.better,m.same,m.worse,
+      (m.totalCalls/m.enrolled).toFixed(1)
+    ])
+  ];
+  const ws4=XLSX.utils.aoa_to_sheet(s4Data);
+  ws4['!cols']=[18,10,10,12,18,14,14,14,12].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb,ws4,'Program Summary');
+
+  const fname=`Wipro_Health_Dashboard_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb,fname);
+}
+
+// ════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════════════════════════════
+function showView(v,el){
+  document.querySelectorAll('.view').forEach(d=>d.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(d=>d.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  el.classList.add('active');
+  const titles={dashboard:'Dashboard Overview',users:'Patient Users',health:'Health Outcomes'};
+  document.getElementById('page-title').textContent=titles[v]||v;
+}
+</script>
+</body>
+</html>
